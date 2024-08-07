@@ -84,8 +84,7 @@ class InferenceRawResult:
         seg_img.header = self.header
         return seg_img
     
-    def get_ros_segmentaion_image_rgb(self) -> Image:
-        use_version = 4
+    def get_ros_segmentaion_image_rgb(self, use_version) -> Image:
         if use_version == 1:
             issac_data = np.genfromtxt('/root/catkin_ws/src/detic_ros/node_script/configs/v1_isaac_sim_config.csv', delimiter=',', names=True, dtype=None, encoding='utf-8')
             rgb_data = np.genfromtxt('/root/catkin_ws/src/detic_ros/node_script/configs/v1_rgb_map.csv', delimiter=',', names=True, dtype=None, encoding='utf-8')
@@ -277,6 +276,7 @@ class DeticWrapper:
             visualized_output = None
         
         instances = predictions['instances'].to(torch.device("cpu"))
+
         instances = self.predictor.predict_instances_only(img)
         # print(type(instances))
         if self.node_config.verbose:

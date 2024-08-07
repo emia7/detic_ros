@@ -31,6 +31,7 @@ class DeticRosNode:
     pub_info: Optional[Publisher]
     pub_image: Optional[Publisher] 
     pub_image_rgb: Optional[Publisher] # used in nodelet
+    pub_image_index_rgb: Optional[Publisher] # used in nodelet
     pub_image_origin_rgb: Optional[Publisher]
     pub_image_origin_depth: Optional[Publisher] # used in nodelet
     pub_camera_info: Optional[Publisher] # used in nodelet
@@ -71,6 +72,7 @@ class DeticRosNode:
                 self.pub_instance_info = rospy.Publisher('~seg_instance_info', SegmentationInstanceInfo, queue_size=1)
                 self.pub_image = rospy.Publisher('~seg_image', Image, queue_size=1)
                 self.pub_image_rgb = rospy.Publisher('~seg_image_rgb', Image, queue_size=1)
+                self.pub_image_index_rgb = rospy.Publisher('~seg_image_index_rgb', Image, queue_size=1)
                 
                 # origin rgb image & depth image
                 self.pub_image_origin_rgb = rospy.Publisher('~origin_rgb', Image, queue_size=1)
@@ -133,8 +135,10 @@ class DeticRosNode:
 
             # seg_image = raw_result.get_ros_segmentaion_image()
             # self.pub_image.publish(seg_image)
-            seg_image_rgb = raw_result.get_ros_segmentaion_image_rgb()
+            seg_image_rgb = raw_result.get_ros_segmentaion_image_rgb(3)
             self.pub_image_rgb.publish(seg_image_rgb)
+            seg_image_index_rgb = raw_result.get_ros_segmentaion_image_rgb(4)
+            self.pub_image_index_rgb.publish(seg_image_index_rgb)
 
             # Original rgb image & depth image & camera info
             self.pub_image_origin_rgb.publish(current_rgb)
