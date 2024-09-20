@@ -1,5 +1,5 @@
 <launch>
-  <arg name="namespace" default="robot1" />
+  <arg name="namespace" default="robot2" />
   <arg name="verbose" default="true" />
   <arg name="model_type" default="swin" />
   <arg name="enable_pubsub" default="true" />
