@@ -1,6 +1,7 @@
 /models
 /node_script/third_party
 /node_script/detic
+/node_script/yoloSamClip
 /test/data
 
 # Byte-compiled / optimized / DLL files

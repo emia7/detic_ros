@@ -11,7 +11,7 @@ from rospy import Publisher, Subscriber
 import message_filters
 
 from node_config import NodeConfig
-from wrapper import DeticWrapper, YOLO_SAM_CLIPWrapper
+from wrapper import DeticWrapper
 from detic_ros.msg import SegmentationInfo, SegmentationInstanceInfo
 from jsk_recognition_msgs.msg import LabelArray, VectorArray
 from sensor_msgs.msg import Image, CameraInfo
@@ -20,9 +20,7 @@ from sensor_msgs.msg import Image, CameraInfo
 _cv_bridge = CvBridge()
 
 class DeticRosNode:
-    # detic_wrapper: DeticWrapper
-    detic_wrapper: YOLO_SAM_CLIPWrapper
-    node_config: NodeConfig
+    detic_wrapper: DeticWrapper
 
     # subscriber 
     sub_image: Subscriber
@@ -54,10 +52,8 @@ class DeticRosNode:
             node_config = NodeConfig.from_rosparam()
 
         rospy.loginfo("node_config: {}".format(node_config))
-        self.node_config = node_config
 
-        # self.detic_wrapper = DeticWrapper(node_config)
-        self.detic_wrapper = YOLO_SAM_CLIPWrapper("/root/catkin_ws/src/detic_ros/node_script/yoloSamClip/yolov8l-world.pt", "/root/catkin_ws/src/detic_ros/node_script/yoloSamClip/sam_l.pt", "ViT-B-16", "/root/catkin_ws/src/detic_ros/node_script/yoloSamClip/vit_b_16-laion400m_e32-55e67d44.pt", "/root/catkin_ws/src/detic_ros/node_script/yoloSamClip/lvis_classes_1203.txt")
+        self.detic_wrapper = DeticWrapper(node_config)
 
         if node_config.enable_pubsub:
             # topic synchronization
@@ -113,9 +109,9 @@ class DeticRosNode:
         current_depth = msg_depth
         current_camera_info = msg_camera_info
         raw_result = self.detic_wrapper.infer(msg)
-        rospy.loginfo('inference done')
+
         # Publish main topics
-        if self.node_config.use_jsk_msgs:
+        if self.detic_wrapper.node_config.use_jsk_msgs:
             # assertion for mypy
             assert self.pub_segimg is not None
             assert self.pub_labels is not None
@@ -159,7 +155,7 @@ class DeticRosNode:
             self.pub_debug_segmentation_image.publish(debug_seg_img)
 
         # Print debug info
-        if self.node_config.verbose:
+        if self.detic_wrapper.node_config.verbose:
             time_elapsed_total = (rospy.Time.now() - msg.header.stamp).to_sec()
             # rospy.loginfo('total elapsed time in callback {}'.format(time_elapsed_total))
 

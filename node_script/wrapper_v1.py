@@ -22,10 +22,6 @@ from sensor_msgs.msg import Image, RegionOfInterest
 from std_msgs.msg import Header, Float32MultiArray
 from detic_ros.msg import SegmentationInfo, SegmentationInstanceInfo
 
-import yaml
-from segment_anything import sam_model_registry, SamPredictor
-
-import pickle
 
 _cv_bridge = CvBridge()
  
@@ -218,7 +214,6 @@ class InferenceRawResult:
                                                      header=self.header)
         return seg_instance_info
 
-
 class DeticWrapper:
     predictor: VisualizationDemo
     node_config: NodeConfig
@@ -332,95 +327,4 @@ class DeticWrapper:
             msg.header,
             detected_classes_names,
             features_msg)
-        # 保存result的数据
-        # with open('/root/catkin_ws/src/detic_ros/node_script/result_detic.pkl', 'wb') as f:
-        #     pickle.dump(result, f)
-        
-        print("detected_classes_names ", detected_classes_names)
         return result
-
-from ultralytics import YOLO, SAM
-import time
-import supervision as sv
-import matplotlib.pyplot as plt
-import open_clip
-from yoloSamClip.yolosamclip import compute_clip_features_batched, measure_time
-
-class YOLO_SAM_CLIPWrapper:
-    predictor_YOLO: YOLO
-    predictor_SAM: SAM
-    predictor_CLIP: None
-    preprocess_CLIP: None
-    tokenizer_CLIP: None
-    class_names: List[str]
-
-    def __init__(self, yolo_model, sam_model, clip_type, clip_model, vocalbulary_path):
-        with open(vocalbulary_path, 'r') as f:
-            vocalbulary_list = f.read().split("\n")
-        self.class_names = vocalbulary_list
-
-        self.predictor_YOLO = measure_time(YOLO)(yolo_model)
-        self.predictor_YOLO.set_classes(vocalbulary_list)
-
-        self.predictor_SAM = measure_time(SAM)(sam_model)
-
-        self.predictor_CLIP, _, self.preprocess_CLIP = open_clip.create_model_and_transforms(
-                clip_type, clip_model
-            )
-        self.predictor_CLIP = self.predictor_CLIP.to("cuda")
-        self.tokenizer_CLIP = open_clip.get_tokenizer(clip_type)
-
-    def infer(self, msg: Image)-> InferenceRawResult:
-        img = _cv_bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        results = self.predictor_YOLO.predict(img, conf=0.1, verbose=False)
-
-        confidences = results[0].boxes.conf.cpu().numpy()
-        detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(int)
-        detection_class_labels = [f"{self.class_names[class_id]}" for class_idx, class_id in enumerate(detection_class_ids)]
-        xyxy_tensor = results[0].boxes.xyxy
-        xyxy_np = xyxy_tensor.cpu().numpy()
-        
-        if xyxy_tensor.numel() != 0:
-            sam_out = self.predictor_SAM.predict(img, bboxes=xyxy_tensor, verbose=False)
-            masks_tensor = sam_out[0].masks.data
-            masks_np = masks_tensor.cpu().numpy()
-        
-        curr_det = sv.Detections(
-            xyxy=xyxy_np,
-            confidence=confidences,
-            class_id=detection_class_ids,
-            mask=masks_np,
-        )
-        image_crops, image_feats, text_feats = compute_clip_features_batched(
-                    img, curr_det, self.predictor_CLIP, self.preprocess_CLIP, self.tokenizer_CLIP, self.class_names, "cuda", True)
-        # for crop in image_crops:
-        #     plt.imshow(crop)
-        print(detection_class_labels)
-        data = np.zeros((img.shape[0], img.shape[1]), dtype=np.int32)
-
-        # largest to smallest order to reduce occlusion.
-        sorted_index = np.argsort([-mask.sum() for mask in masks_np])
-        for i in sorted_index:
-            mask = masks_np[i]
-            # label 0 is reserved for background label, so starting from 1
-            data[mask] = (i + 1)
-
-        features_np = [feature.astype(np.float32) for feature in image_feats]
-
-        features_msg = Float32MultiArray()
-        if len(features_np) > 0:
-            features_msg.data = np.concatenate(features_np).flatten() # Flatten the array to 1D
-
-        results =  InferenceRawResult(
-            data,
-            detection_class_ids.tolist(),
-            confidences.tolist(),
-            xyxy_np,
-            img,
-            msg.header,
-            detection_class_labels,
-            features_msg
-        )
-        # with open('/root/catkin_ws/src/detic_ros/node_script/result_yolosamclip.pkl', 'wb') as f:
-        #     pickle.dump(results, f)
-        return results
