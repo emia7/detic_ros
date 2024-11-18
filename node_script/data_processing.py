@@ -27,9 +27,35 @@ def csv_delete_column():
 
     print(f"已成功保留 'id' 和 'name' 列，并将其写入新的 CSV 文件: {output_csv_file}")
 
+
+def find_id_in_csv():
+    csv_file1 = '/root/catkin_ws/src/detic_ros/node_script/configs/v3_lvis_detected.csv'
+    file1 = pd.read_csv(csv_file1)
+
+    csv_file2 = '/root/catkin_ws/src/detic_ros/node_script/configs/v4_lvis_detected_IKEA.csv'
+    file2 = pd.read_csv(csv_file2)
+
+    # 提取 index 列
+    index_file1 = set(file1['index'])
+    index_file2 = set(file2['index'])
+
+    # 找出文件1独有的 index
+    unique_to_file1 = index_file1 - index_file2
+
+    # 找出文件2独有的 index
+    unique_to_file2 = index_file2 - index_file1
+
+    # 打印结果
+    print("Indexes unique to file1:")
+    print(unique_to_file1)
+
+    print("\nIndexes unique to file2:")
+    print(unique_to_file2)
+
+
 def csv_add_id_random_rgb():
     # 读取 CSV 文件
-    csv_file = '/root/catkin_ws/src/detic_ros/node_script/configs/lvis_detected_class.csv'
+    csv_file = '/root/catkin_ws/src/detic_ros/node_script/configs/v4_lvis_detected_class.csv'
     data = pd.read_csv(csv_file)
 
     # 生成随机的 RGB 颜色值
@@ -41,14 +67,14 @@ def csv_add_id_random_rgb():
     
 
     # 将结果写入新的 CSV 文件
-    output_csv_file = '/root/catkin_ws/src/detic_ros/node_script/configs/lvis_detected.csv'
+    output_csv_file = '/root/catkin_ws/src/detic_ros/node_script/configs/v4_lvis_detected.csv'
     data.to_csv(output_csv_file, index=False)
 
     print(f"已成功添加id和RGB列，并将其写入新的 CSV 文件: {output_csv_file}")
 
 def csv_add_id_rgb():
     # 读取 CSV 文件
-    csv_file = '/root/catkin_ws/src/detic_ros/node_script/configs/v3_lvis_detected_class.csv'
+    csv_file = '/root/catkin_ws/src/detic_ros/node_script/configs/v4_lvis_detected_class.csv'
     data = pd.read_csv(csv_file)
 
     # 生成RGB 颜色值
@@ -93,4 +119,4 @@ def test_rosmsg():
     msg.boxes = np.array([[1,1,2,3],[1,4,2,5]])
     print(msg)
 
-test_rosmsg()
+csv_add_id_random_rgb()

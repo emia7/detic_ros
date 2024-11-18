@@ -2,6 +2,7 @@
 /node_script/third_party
 /node_script/detic
 /node_script/yoloSamClip
+/node_script/maskrcnnClip
 /test/data
 
 # Byte-compiled / optimized / DLL files

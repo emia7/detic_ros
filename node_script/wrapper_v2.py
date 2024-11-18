@@ -126,7 +126,7 @@ class InferenceRawResult:
             seg_img_rgb.header = seg_img.header           
 
         elif use_version == 3:
-            index_id_rgb = np.genfromtxt('/root/catkin_ws/src/detic_ros/node_script/configs/v4_lvis_detected.csv', delimiter=',', names=True, dtype=None, encoding='utf-8')
+            index_id_rgb = np.genfromtxt('/root/catkin_ws/src/detic_ros/node_script/configs/v3_lvis_detected.csv', delimiter=',', names=True, dtype=None, encoding='utf-8')
             seg_img = self.get_ros_segmentaion_image()
             id_img = _cv_bridge.imgmsg_to_cv2(seg_img, "32SC1")
             rgb_img = np.zeros((id_img.shape[0], id_img.shape[1], 3), dtype=np.uint8)
@@ -332,7 +332,6 @@ class DeticWrapper:
             msg.header,
             detected_classes_names,
             features_msg)
-        
         # 保存result的数据
         # with open('/root/catkin_ws/src/detic_ros/node_script/result_detic.pkl', 'wb') as f:
         #     pickle.dump(result, f)
@@ -345,7 +344,7 @@ import time
 import supervision as sv
 import matplotlib.pyplot as plt
 import open_clip
-from yoloSamClip.yolosamclip import compute_clip_features_batched, measure_time 
+from yoloSamClip.yolosamclip import compute_clip_features_batched, measure_time
 
 class YOLO_SAM_CLIPWrapper:
     predictor_YOLO: YOLO
@@ -355,13 +354,16 @@ class YOLO_SAM_CLIPWrapper:
     tokenizer_CLIP: None
     class_names: List[str]
 
-    def __init__(self, yolo_args, sam_args, clip_type, clip_model, vocalbulary_path):
-        self.predictor_YOLO = measure_time(YOLO)(yolo_args)
+    def __init__(self, yolo_model, sam_model, clip_type, clip_model, vocalbulary_path):
         with open(vocalbulary_path, 'r') as f:
             vocalbulary_list = f.read().split("\n")
-        self.predictor_YOLO.set_classes(vocalbulary_list)
         self.class_names = vocalbulary_list
-        self.predictor_SAM = measure_time(SAM)(sam_args)
+
+        self.predictor_YOLO = measure_time(YOLO)(yolo_model)
+        self.predictor_YOLO.set_classes(vocalbulary_list)
+
+        self.predictor_SAM = measure_time(SAM)(sam_model)
+
         self.predictor_CLIP, _, self.preprocess_CLIP = open_clip.create_model_and_transforms(
                 clip_type, clip_model
             )
@@ -371,140 +373,43 @@ class YOLO_SAM_CLIPWrapper:
     def infer(self, msg: Image)-> InferenceRawResult:
         img = _cv_bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         results = self.predictor_YOLO.predict(img, conf=0.1, verbose=False)
+
         confidences = results[0].boxes.conf.cpu().numpy()
         detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(int)
         detection_class_labels = [f"{self.class_names[class_id]}" for class_idx, class_id in enumerate(detection_class_ids)]
         xyxy_tensor = results[0].boxes.xyxy
         xyxy_np = xyxy_tensor.cpu().numpy()
         
-        data = np.zeros((img.shape[0], img.shape[1]), dtype=np.int32)
-        features_msg = Float32MultiArray()
-
         if xyxy_tensor.numel() != 0:
-            # use SAM to get masks
             sam_out = self.predictor_SAM.predict(img, bboxes=xyxy_tensor, verbose=False)
             masks_tensor = sam_out[0].masks.data
             masks_np = masks_tensor.cpu().numpy()
-
-            # use Clip to get features
-            curr_det = sv.Detections(
-                xyxy=xyxy_np,
-                confidence=confidences,
-                class_id=detection_class_ids,
-                mask=masks_np,
-            )
-
-            image_crops, image_feats, text_feats = compute_clip_features_batched(
-                        img, curr_det, self.predictor_CLIP, self.preprocess_CLIP, self.tokenizer_CLIP, self.class_names, "cuda", True)
-
-
-            # data
-            # largest to smallest order to reduce occlusion.
-            sorted_index = np.argsort([-mask.sum() for mask in masks_np])
-            for i in sorted_index:
-                mask = masks_np[i]
-                # label 0 is reserved for background label, so starting from 1
-                data[mask] = (i + 1) 
-
-            # feature_msg
-            features_np = [feature.astype(np.float32) for feature in image_feats]
-            if len(features_np) > 0:
-                features_msg.data = np.concatenate(features_np).flatten() # Flatten the array to 1D
-
-        results =  InferenceRawResult(
-            data,
-            detection_class_ids.tolist(),
-            confidences.tolist(),
-            xyxy_np,
-            img,
-            msg.header,
-            detection_class_labels,
-            features_msg
-        )
-
-        # with open('/root/catkin_ws/src/detic_ros/node_script/result_yolosamclip.pkl', 'wb') as f:
-        #     pickle.dump(results, f)
-        print("detected_classes_names ", detection_class_labels)
-        return results
-
-from detectron2 import model_zoo
-from detectron2.engine import DefaultPredictor
-from detectron2.config import get_cfg
-from detectron2.utils.visualizer import Visualizer
-from detectron2.data import MetadataCatalog, DatasetCatalog
-import json
-
-class Maskrcnn_CLIPWrapper:
-    predictor_MASKRCNN: None
-    predictor_CLIP: None
-    preprocess_CLIP: None
-    tokenizer_CLIP: None
-    class_names_0_5: List[str]
-    class_names_1: List[str]
-    
-    def __init__(self, maskrcnn_cfg, clip_type, clip_model, vocalbulary_path_0_5, vocalbulary_path_1, lvis_0_5_to_1_json_path):
-        self.predictor_MASKRCNN = DefaultPredictor(maskrcnn_cfg)
-        with open(vocalbulary_path_0_5, 'r') as f:
-            vocalbulary_list = f.read().split("\n")
-        self.class_names_0_5 = vocalbulary_list
-
-        with open(vocalbulary_path_1, 'r') as f:
-            vocalbulary_list = f.read().split("\n")
-        self.class_names_1 = vocalbulary_list
-
-        self.predictor_CLIP, _, self.preprocess_CLIP = open_clip.create_model_and_transforms(
-                clip_type, clip_model
-            )
-        self.predictor_CLIP = self.predictor_CLIP.to("cuda")
-        self.tokenizer_CLIP = open_clip.get_tokenizer(clip_type)
-        self.lvis_0_5_to_1_dict = {}
-        with open(lvis_0_5_to_1_json_path, 'r') as f:
-            self.lvis_0_5_to_1_dict = json.load(f)
-
-    def infer(self, msg: Image)-> InferenceRawResult:
-        img = _cv_bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        results = self.predictor_MASKRCNN(img)
-        confidences = results["instances"].scores.cpu().numpy()
-        detection_class_ids = results["instances"].pred_classes.cpu().numpy()
         
-        # map lvis0.5 to lvis1
-        for (index, class_id) in enumerate(detection_class_ids):
-            class_id = str(class_id)
-            if class_id in self.lvis_0_5_to_1_dict:
-                detection_class_ids[index] = self.lvis_0_5_to_1_dict[class_id]
-            else:
-                detection_class_ids[index] = 0
-
-        detection_class_labels = [f"{self.class_names_1[class_id]}" for class_idx, class_id in enumerate(detection_class_ids)]
-        xyxy_np = results["instances"].pred_boxes.tensor.cpu().numpy()
-        masks_np = results["instances"].pred_masks.cpu().numpy()
+        curr_det = sv.Detections(
+            xyxy=xyxy_np,
+            confidence=confidences,
+            class_id=detection_class_ids,
+            mask=masks_np,
+        )
+        image_crops, image_feats, text_feats = compute_clip_features_batched(
+                    img, curr_det, self.predictor_CLIP, self.preprocess_CLIP, self.tokenizer_CLIP, self.class_names, "cuda", True)
+        # for crop in image_crops:
+        #     plt.imshow(crop)
+        print(detection_class_labels)
 
         data = np.zeros((img.shape[0], img.shape[1]), dtype=np.int32)
+        # largest to smallest order to reduce occlusion.
+        sorted_index = np.argsort([-mask.sum() for mask in masks_np])
+        for i in sorted_index:
+            mask = masks_np[i]
+            # label 0 is reserved for background label, so starting from 1
+            data[mask] = (i + 1)
+
+        features_np = [feature.astype(np.float32) for feature in image_feats]
+
         features_msg = Float32MultiArray()
-
-        if len(xyxy_np) > 0:
-            # use Clip to get features
-            curr_det = sv.Detections(xyxy=xyxy_np,
-                confidence=confidences,
-                class_id=detection_class_ids,
-                mask=masks_np,
-            )
-            
-            image_crops, image_feats, text_feats = compute_clip_features_batched(
-                        img, curr_det, self.predictor_CLIP, self.preprocess_CLIP, self.tokenizer_CLIP, self.class_names_1, "cuda", True)
-            
-            # data
-            # largest to smallest order to reduce occlusion.
-            sorted_index = np.argsort([-mask.sum() for mask in masks_np])
-            for i in sorted_index:
-                mask = masks_np[i]
-                # label 0 is reserved for background label, so starting from 1
-                data[mask] = (i + 1)
-
-            # feature_msg
-            features_np = [feature.astype(np.float32) for feature in image_feats]
-            if len(features_np) > 0:
-                features_msg.data = np.concatenate(features_np).flatten() # Flatten the array to 1D
+        if len(features_np) > 0:
+            features_msg.data = np.concatenate(features_np).flatten() # Flatten the array to 1D
 
         results =  InferenceRawResult(
             data,
@@ -518,5 +423,4 @@ class Maskrcnn_CLIPWrapper:
         )
         # with open('/root/catkin_ws/src/detic_ros/node_script/result_yolosamclip.pkl', 'wb') as f:
         #     pickle.dump(results, f)
-        print("detected_classes_names ", detection_class_labels)
         return results

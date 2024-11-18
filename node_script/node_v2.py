@@ -11,18 +11,17 @@ from rospy import Publisher, Subscriber
 import message_filters
 
 from node_config import NodeConfig
-from wrapper import DeticWrapper, YOLO_SAM_CLIPWrapper, Maskrcnn_CLIPWrapper
+from wrapper import DeticWrapper, YOLO_SAM_CLIPWrapper
 from detic_ros.msg import SegmentationInfo, SegmentationInstanceInfo
 from jsk_recognition_msgs.msg import LabelArray, VectorArray
 from sensor_msgs.msg import Image, CameraInfo
-from detectron2.config import get_cfg
+
 
 _cv_bridge = CvBridge()
 
 class DeticRosNode:
     detic_wrapper: DeticWrapper
     # detic_wrapper: YOLO_SAM_CLIPWrapper
-    # detic_wrapper: Maskrcnn_CLIPWrapper
     node_config: NodeConfig
 
     # subscriber 
@@ -59,12 +58,6 @@ class DeticRosNode:
 
         self.detic_wrapper = DeticWrapper(node_config)
         # self.detic_wrapper = YOLO_SAM_CLIPWrapper("/root/catkin_ws/src/detic_ros/node_script/yoloSamClip/yolov8l-world.pt", "/root/catkin_ws/src/detic_ros/node_script/yoloSamClip/sam_l.pt", "ViT-B-16", "/root/catkin_ws/src/detic_ros/node_script/yoloSamClip/vit_b_16-laion400m_e32-55e67d44.pt", "/root/catkin_ws/src/detic_ros/node_script/yoloSamClip/lvis_classes_1203.txt")
-        
-        # maskrcnn_cfg = get_cfg()
-        # maskrcnn_cfg.merge_from_file("/root/catkin_ws/src/detic_ros/node_script/maskrcnnClip/detectron2/configs/LVISv0.5-InstanceSegmentation/mask_rcnn_R_50_FPN_1x.yaml")
-        # maskrcnn_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # set threshold for this model
-        # maskrcnn_cfg.MODEL.WEIGHTS = "/root/catkin_ws/src/detic_ros/node_script/maskrcnnClip/detectron2/models/model_final_571f7c.pkl"
-        # self.detic_wrapper = Maskrcnn_CLIPWrapper(maskrcnn_cfg, "ViT-B-16", "/root/catkin_ws/src/detic_ros/node_script/yoloSamClip/vit_b_16-laion400m_e32-55e67d44.pt", "/root/catkin_ws/src/detic_ros/node_script/maskrcnnClip/lvis_classes_1230.txt", "/root/catkin_ws/src/detic_ros/node_script/maskrcnnClip/lvis_classes_1203.txt", "/root/catkin_ws/src/detic_ros/node_script/maskrcnnClip/dict_match.json")
 
         if node_config.enable_pubsub:
             # topic synchronization
@@ -106,13 +99,12 @@ class DeticRosNode:
         rospy.loginfo('initialized node')
 
     def write_into_csv(self, raw_result):
-        csv_file = '/root/catkin_ws/src/detic_ros/node_script/configs/v5_lvis_detected_IKEA&uHumans.csv'
+        csv_file = '/root/catkin_ws/src/detic_ros/node_script/configs/lvis_detected_class.csv'
         data = pd.read_csv(csv_file)
         for i in range(len(raw_result.class_indices)):
             new_data = {'index': raw_result.class_indices[i], 'name': raw_result.detected_class_names[i]}
             if not ((data['index'] == new_data['index']) & (data['name'] == new_data['name'])).any():
-                new_row = pd.DataFrame([new_data])
-                data = pd.concat([data, new_row], ignore_index=True)
+                data = data.append(new_data, ignore_index=True)
         data.to_csv(csv_file, index=False)
 
     def callback_image(self, msg: Image, msg_depth: Image, msg_camera_info: CameraInfo):
