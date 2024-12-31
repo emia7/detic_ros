@@ -129,7 +129,8 @@ class InferenceRawResult:
             index_id_rgb = np.genfromtxt('/root/catkin_ws/src/detic_ros/node_script/configs/v4_lvis_detected.csv', delimiter=',', names=True, dtype=None, encoding='utf-8')
             seg_img = self.get_ros_segmentaion_image()
             id_img = _cv_bridge.imgmsg_to_cv2(seg_img, "32SC1")
-            rgb_img = np.zeros((id_img.shape[0], id_img.shape[1], 3), dtype=np.uint8)
+            rgb_img = 10 * np.ones((id_img.shape[0], id_img.shape[1], 3), dtype=np.uint8)
+            # rgb_img = np.zeros((id_img.shape[0], id_img.shape[1], 3), dtype=np.uint8)
 
             LabelArray = self.get_label_array()
             for i,label in enumerate(LabelArray.labels):
@@ -138,6 +139,9 @@ class InferenceRawResult:
                 id = ids[0] if ids else 0
                 # print("index ", index, "to id ", id )
                 if id > 0:
+                    # if id == 79 or id == 676 or id == 64:
+                    #     pass
+                    # else:
                     rgb_img[id_img == i+1] = (index_id_rgb[id-1][3], index_id_rgb[id-1][4], index_id_rgb[id-1][5])
             
             seg_img_rgb = _cv_bridge.cv2_to_imgmsg(rgb_img, encoding="rgb8")
